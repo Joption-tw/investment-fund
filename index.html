@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>連發哥 即時績效 - V1.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            color: #1e293b;
+            font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(226, 232, 240, 1);
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+        }
+        #performance-chart {
+            height: 500px;
+            width: 100%;
+        }
+        @media (min-width: 768px) {
+            #performance-chart { height: 600px; }
+        }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .stat-value { font-family: Arial, sans-serif; }
+
+        .session-btn {
+            width: 100%;
+            padding: 0.5rem 0.25rem;
+            border-radius: 0.4rem;
+            font-size: 10px;
+            font-weight: 800;
+            transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            background-color: white;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        @media (min-width: 640px) {
+            .session-btn { font-size: 11px; }
+        }
+        .session-btn.active {
+            background-color: #f97316;
+            color: white;
+            border-color: #ea580c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.2);
+        }
+        .session-btn.night.active { background-color: #1e293b; border-color: #0f172a; }
+
+        .mode-toggle {
+            display: flex;
+            background: #f1f5f9;
+            padding: 2px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .mode-btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            border-radius: 6px;
+            transition: all 0.2s;
+            cursor: pointer;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        @media (min-width: 640px) {
+            .mode-btn { padding: 6px 14px; font-size: 12px; }
+        }
+        .mode-btn.active.l-idx { background: #2563eb; color: white; }
+        .mode-btn.active.l-tot { background: #475569; color: white; }
+        .mode-btn.active.r-prf { background: #e11d48; color: white; }
+        .mode-btn.active.r-tmv { background: #f97316; color: white; }
+        .mode-btn.active.r-ast { background: #9333ea; color: white; }
+
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .live-indicator { animation: pulse-soft 2s infinite; }
+    </style>
+</head>
+<body class="p-1.5 sm:p-4">
+    <div id="capture-root" class="max-w-[1700px] mx-auto space-y-2 sm:space-y-3 p-1 sm:p-2 bg-[#f8fafc]">
+
+        <header class="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] items-center glass-card px-3 sm:px-6 py-3 sm:py-4 gap-3 min-h-[70px]">
+            <div class="flex items-center justify-between w-full sm:w-auto">
+                <div class="bg-blue-600 p-0.5 rounded-lg shadow-sm overflow-hidden flex items-center justify-center w-10 h-10 sm:w-14 sm:h-14">
+                    <img src="IP標籤.jpg" alt="Logo" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <i data-lucide="bar-chart-3" class="text-white w-6 h-6 hidden"></i>
+                </div>
+                <p id="update-time-mobile" class="text-[10px] font-bold text-slate-400 font-sans sm:hidden">--/-- --:--</p>
+            </div>
+
+            <div class="text-center px-2">
+                <h1 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-800 tracking-tighter mb-0.5 sm:mb-1">連發哥 即時績效</h1>
+                <div class="flex items-center justify-center gap-2">
+                    <span class="text-[10px] sm:text-[12px] font-bold text-slate-400 uppercase tracking-widest">連發哥帳戶 V1.0</span>
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-[9px] sm:text-[10px] font-bold text-emerald-600 live-indicator">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> LIVE
+                    </span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-center sm:justify-end gap-3 w-full sm:w-auto">
+                <div class="text-right hidden lg:block mr-2">
+                    <p id="update-time" class="text-[11px] font-bold text-slate-400 font-sans tracking-tighter">--/-- --:--:--</p>
+                </div>
+                <div class="flex flex-row sm:flex-col gap-2 w-full sm:w-auto sm:min-w-[110px]">
+                    <button id="refresh-btn" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-lg font-bold text-[11px] sm:text-xs transition-all shadow-sm">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 同步數據
+                    </button>
+                    <button onclick="takeScreenshot()" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg font-bold text-[11px] sm:text-xs transition-all shadow-sm">
+                        <i data-lucide="camera" class="w-3.5 h-3.5"></i> 截圖分享
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 統計數據卡片 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 sm:gap-2 text-center">
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-blue-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">百點震幅</p>
+                <p id="stat-swing" class="text-base sm:text-lg font-black stat-value text-slate-800 leading-none">--</p>
+            </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-rose-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">本週獲利</p>
+                <p id="stat-profit" class="text-base sm:text-lg font-black stat-value text-rose-600 leading-none">--%</p>
+            </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-amber-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">當盤績效</p>
+                <p id="stat-max" class="text-base sm:text-lg font-black stat-value text-slate-800 leading-none">--%</p>
+            </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-orange-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">時間價值</p>
+                <p id="stat-timeval" class="text-base sm:text-lg font-black stat-value text-orange-600 leading-none">--</p>
+            </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-purple-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">資產</p>
+                <p id="stat-asset" class="text-base sm:text-lg font-black stat-value text-purple-600 leading-none">--</p>
+            </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-indigo-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">進場時間點</p>
+                <p id="stat-entry" class="text-sm sm:text-base font-black stat-value text-indigo-600 leading-none">--</p>
+            </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-slate-400 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">出場時間點</p>
+                <p id="stat-exit" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p>
+            </div>
+        </div>
+
+        <div class="glass-card p-1 sm:p-1.5" id="ui-switcher-container">
+            <div id="session-switcher" class="grid grid-cols-5 md:grid-cols-10 gap-1"></div>
+        </div>
+
+        <div class="glass-card p-2 md:p-4 relative overflow-hidden">
+            <div id="loading-overlay" class="absolute inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm transition-opacity duration-300">
+                <div class="flex flex-col items-center gap-3">
+                    <div class="w-8 h-8 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
+                    <p id="loading-msg" class="text-blue-600 font-black text-[11px] tracking-widest uppercase">數據同步處理中</p>
+                </div>
+            </div>
+
+            <div class="flex flex-col lg:flex-row justify-between items-center mb-4 sm:mb-6 gap-4 px-1" id="ui-axis-controls">
+                <div class="flex flex-col gap-1 w-full lg:w-auto">
+                    <span class="text-[9px] font-black text-slate-400 uppercase ml-1">左軸顯示</span>
+                    <div class="mode-toggle">
+                        <div id="btn-l-idx" class="mode-btn flex-1 text-center" onclick="toggleAxis('lIdx')">期指</div>
+                        <div id="btn-l-tot" class="mode-btn flex-1 text-center active l-tot" onclick="toggleAxis('lTot')">總點數</div>
+                    </div>
+                </div>
+                <div id="dynamic-legend" class="flex flex-wrap justify-center items-center gap-3 sm:gap-4 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 min-h-[40px]"></div>
+                <div class="flex flex-col gap-1 w-full lg:w-auto items-center lg:items-end">
+                    <span class="text-[9px] font-black text-slate-400 uppercase mr-1">右軸顯示</span>
+                    <div class="mode-toggle">
+                        <div id="btn-r-prf" class="mode-btn flex-1 text-center active r-prf" onclick="toggleAxis('rPrf')">獲利率</div>
+                        <div id="btn-r-tmv" class="mode-btn flex-1 text-center active r-tmv" onclick="toggleAxis('rTmv')">時間價值</div>
+                        <div id="btn-r-ast" class="mode-btn flex-1 text-center active r-ast" onclick="toggleAxis('rAst')">資產</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="performance-chart"></div>
+        </div>
+    </div>
+
+    <script>
+        const SHEET_ID = '1GHOlICHupM5W4lap8VkaD1WdIEZ8n1rsScTrxo7BW0k';
+        const GID = '1823639969';
+        const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+
+        let myChart = null;
+        let globalData = null;
+        let rowRanges = [];
+        let currentSessionIdx = -1;
+        let axisState = { lIdx: false, lTot: true, rPrf: true, rTmv: true, rAst: true };
+
+        // 動態偵測交易時段
+        function buildSessionRanges(xLabels) {
+            const sessions = [];
+            const dayNames = { '一': '周一', '二': '週二', '三': '周三', '四': '週四', '五': '週五', '六': '週六', '日': '周日' };
+            let curLabel = null, curType = 'night', segStart = 0;
+
+            for (let i = 0; i < xLabels.length; i++) {
+                const m = xLabels[i].match(/^([一二三四五六日])\s+(\d{1,2}):/);
+                if (!m) continue;
+                const day = m[1], h = parseInt(m[2]);
+                const period = (h >= 8 && h < 15) ? '早' : '晚';
+                const label = `${dayNames[day] || day}${period}`;
+                const type = period === '晚' ? 'night' : 'day';
+
+                if (curLabel !== label) {
+                    if (curLabel !== null) {
+                        sessions[sessions.length - 1].end = i + 1;
+                    }
+                    curLabel = label; curType = type; segStart = i;
+                    sessions.push({ label, start: i + 2, end: xLabels.length + 1, type });
+                }
+            }
+            return sessions.length > 0 ? sessions : [{ label: '全部', start: 2, end: xLabels.length + 1, type: 'night' }];
+        }
+
+        function getAutoSessionIndex() {
+            const now = new Date(); const day = now.getDay(); const hour = now.getHours();
+            if (rowRanges.length === 0) return 0;
+            // 嘗試找最接近當前時段的 session
+            const dayChar = ['日','一','二','三','四','五','六'][day];
+            const period = (hour >= 8 && hour < 15) ? '早' : '晚';
+            const dayNames = { '一': '周一', '二': '週二', '三': '周三', '四': '週四', '五': '週五', '六': '週六', '日': '周日' };
+            const targetLabel = `${dayNames[dayChar] || dayChar}${period}`;
+            const idx = rowRanges.findIndex(r => r.label === targetLabel);
+            return idx !== -1 ? idx : rowRanges.length - 1;
+        }
+
+        // --- 百點震幅計算演算法 ---
+        function calculateSwing100(prices, threshold = 100) {
+            const valid = prices.filter(p => p !== null);
+            if (valid.length < 2) return 0;
+
+            let totalSwing = 0;
+            let lastPivot = valid[0];
+            let currentHigh = valid[0];
+            let currentLow = valid[0];
+            let trend = 0;
+
+            for (let i = 1; i < valid.length; i++) {
+                let p = valid[i];
+                if (trend === 0) {
+                    if (p >= lastPivot + threshold) { trend = 1; currentHigh = p; }
+                    else if (p <= lastPivot - threshold) { trend = -1; currentLow = p; }
+                } else if (trend === 1) {
+                    if (p > currentHigh) { currentHigh = p; }
+                    else if (p <= currentHigh - threshold) {
+                        totalSwing += (currentHigh - lastPivot);
+                        trend = -1; lastPivot = currentHigh; currentLow = p;
+                    }
+                } else if (trend === -1) {
+                    if (p < currentLow) { currentLow = p; }
+                    else if (p >= currentLow + threshold) {
+                        totalSwing += (lastPivot - currentLow);
+                        trend = 1; lastPivot = currentLow; currentHigh = p;
+                    }
+                }
+            }
+            if (trend === 1 && currentHigh > lastPivot + threshold) totalSwing += (currentHigh - lastPivot);
+            else if (trend === -1 && currentLow < lastPivot - threshold) totalSwing += (lastPivot - currentLow);
+
+            return totalSwing;
+        }
+
+        function parseMinutes(label, prevMin) {
+            const parts = (label || '').trim().split(/\s+/);
+            const timePart = parts.length >= 2 ? parts[parts.length - 1] : parts[0];
+            const m = timePart.match(/(\d{1,2}):(\d{2})/);
+            if (!m) return null;
+            let mins = parseInt(m[1]) * 60 + parseInt(m[2]);
+            if (prevMin !== null && prevMin !== undefined && mins + 1440 - prevMin < 360 && mins < prevMin) {
+                mins += 1440;
+            }
+            return mins;
+        }
+
+        function lerp(mins, vals, t) {
+            for (let i = 0; i < mins.length - 1; i++) {
+                if (mins[i] <= t && t <= mins[i + 1]) {
+                    const ratio = (t - mins[i]) / (mins[i + 1] - mins[i]);
+                    const a = vals[i], b = vals[i + 1];
+                    if (a === null || b === null) return null;
+                    return a + (b - a) * ratio;
+                }
+            }
+            return null;
+        }
+
+        function fmtMin(totalMins) {
+            const m = ((totalMins % 1440) + 1440) % 1440;
+            return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        }
+
+        async function exportExcel() {
+            if (!globalData || currentSessionIdx === -1) return;
+            const r = rowRanges[currentSessionIdx];
+            const si = r.start - 2;
+            const ei = Math.min(r.end - 2, globalData.x.length - 1);
+            if (si >= globalData.x.length) return;
+
+            const labels   = globalData.x.slice(si, ei + 1);
+            const price    = globalData.yPrice.slice(si, ei + 1);
+            const priceRaw = globalData.yPriceRaw.slice(si, ei + 1);
+            const profit   = globalData.yProfit.slice(si, ei + 1);
+            const timeVal  = globalData.yTimeVal.slice(si, ei + 1);
+            const asset    = globalData.yAsset.slice(si, ei + 1);
+            const total    = globalData.yTotal.slice(si, ei + 1);
+            const totalRaw = globalData.yTotalRaw.slice(si, ei + 1);
+
+            const now = new Date(); const pad = n => n.toString().padStart(2, '0');
+            const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+            const sessionLabel = rowRanges[currentSessionIdx].label;
+
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'Joption'; wb.created = now;
+
+            const hdrStyle = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }, alignment: { horizontal: 'center' } };
+            function applyHeader(ws, cols) {
+                const row = ws.addRow(cols);
+                row.eachCell(c => { c.font = hdrStyle.font; c.fill = hdrStyle.fill; c.alignment = hdrStyle.alignment; });
+                row.height = 18;
+            }
+            function setColWidths(ws, widths) {
+                widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+            }
+
+            const ws1 = wb.addWorksheet('原始資料');
+            applyHeader(ws1, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '時間價值', '資產', '總點數(原始)', '總點數(平滑)']);
+            setColWidths(ws1, [12, 12, 12, 10, 12, 14, 14, 14]);
+            for (let i = 0; i < labels.length; i++) {
+                ws1.addRow([labels[i], priceRaw[i] ?? null, price[i] ?? null, profit[i] ?? null, timeVal[i] ?? null, asset[i] ?? null, totalRaw[i] ?? null, total[i] ?? null]);
+            }
+
+            const mins = [];
+            let prevMin = null;
+            for (let i = 0; i < labels.length; i++) {
+                const m = parseMinutes(labels[i], prevMin);
+                mins.push(m);
+                if (m !== null) prevMin = m;
+            }
+            const validMins = mins.filter(v => v !== null);
+            if (validMins.length >= 2) {
+                const ws2 = wb.addWorksheet('每分鐘內插');
+                applyHeader(ws2, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '時間價值', '資產', '總點數']);
+                setColWidths(ws2, [10, 12, 12, 10, 12, 14, 12]);
+                const minT = validMins[0], maxT = validMins[validMins.length - 1];
+                for (let t = minT; t <= maxT; t++) {
+                    const v = (arr, dp) => { const r = lerp(mins, arr, t); return r !== null ? +r.toFixed(dp) : null; };
+                    ws2.addRow([fmtMin(t), v(priceRaw,1), v(price,1), v(profit,4), v(timeVal,0), v(asset,0), v(total,1)]);
+                }
+            }
+
+            if (myChart) {
+                try {
+                    const dataUrl = myChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#f8fafc' });
+                    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+                    const ws3 = wb.addWorksheet('績效圖');
+                    ws3.getCell('A1').value = `${sessionLabel} 績效圖表`;
+                    ws3.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1E3A5F' } };
+                    const imgId = wb.addImage({ base64, extension: 'png' });
+                    ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 550 } });
+                    ws3.getColumn(1).width = 15;
+                } catch (e) { console.warn('圖表嵌入失敗', e); }
+            }
+
+            const buf = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `連發哥績效_${sessionLabel}_${ts}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function takeScreenshot() {
+            const root = document.getElementById('capture-root');
+            const loading = document.getElementById('loading-overlay');
+            const msgEl = document.getElementById('loading-msg');
+            const isMobile = window.innerWidth < 768;
+            loading.classList.remove('hidden'); loading.style.opacity = '1';
+            msgEl.innerText = "正在生成高品質報表...";
+            try {
+                await new Promise(r => setTimeout(r, 500));
+                const canvas = await html2canvas(root, {
+                    useCORS: true, backgroundColor: '#f8fafc', scale: isMobile ? 3 : 4, logging: false,
+                    onclone: (clonedDoc) => {
+                        const clonedRoot = clonedDoc.getElementById('capture-root');
+                        clonedRoot.style.width = isMobile ? "1200px" : "1600px";
+                        clonedRoot.style.margin = "0 auto";
+                        clonedDoc.getElementById('loading-overlay').style.display = 'none';
+                    }
+                });
+                const now = new Date(); const pad = (n) => n.toString().padStart(2, '0');
+                const timeStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+                const link = document.createElement('a');
+                link.download = `連發哥績效_${timeStr}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.95);
+                link.click();
+                try { await exportExcel(); } catch(exErr) { console.warn("Excel 匯出失敗", exErr); }
+            } catch (e) { console.error("截圖失敗", e); }
+            finally { loading.style.opacity = '0'; setTimeout(() => { loading.classList.add('hidden'); msgEl.innerText = "數據同步處理中"; }, 300); }
+        }
+
+        function parseCSVLine(text) {
+            const res = []; let cur = ""; let inQ = false;
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === '"') { if (inQ && text[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+                else if (char === ',' && !inQ) { res.push(cur.trim()); cur = ""; }
+                else cur += char;
+            }
+            res.push(cur.trim()); return res;
+        }
+
+        function rawNumeric(v) {
+            if (v === undefined || v === null || v.toString().trim() === "") return null;
+            let num = parseFloat(v.toString().replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+            return isNaN(num) ? null : num;
+        }
+
+        function applySmoothing(arr) {
+            if (arr.length < 3) return arr;
+            let smoothed = [];
+            for (let i = 0; i < arr.length; i++) {
+                let sum = 0, count = 0;
+                for (let j = i - 1; j <= i + 1; j++) {
+                    if (j >= 0 && j < arr.length && arr[j] !== null) { sum += arr[j]; count++; }
+                }
+                smoothed.push(count > 0 ? parseFloat((sum / count).toFixed(4)) : null);
+            }
+            return smoothed;
+        }
+
+        async function fetchData() {
+            const loading = document.getElementById('loading-overlay');
+            loading.classList.remove('hidden'); loading.style.opacity = '1';
+            try {
+                const response = await fetch(`${CSV_URL}&t=${Date.now()}`);
+                const text = await response.text();
+                const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                const raw = { x: [], yPrice: [], yProfit: [], yTimeVal: [], yAsset: [], yTotal: [], yTotalRaw: [], yPriceRaw: [] };
+                for (let i = 1; i < lines.length; i++) {
+                    const cols = parseCSVLine(lines[i]);
+                    if (cols.length >= 27) {
+                        raw.x.push(cols[0]);
+                        const p = rawNumeric(cols[22]);
+                        raw.yPriceRaw.push(p);
+                        raw.yPrice.push(p);
+                        raw.yProfit.push(rawNumeric(cols[26]));
+                        raw.yTimeVal.push(rawNumeric(cols[21]));
+                        raw.yAsset.push(rawNumeric(cols[8]));
+                        const totalPoint = rawNumeric(cols[12]);
+                        raw.yTotal.push(totalPoint);
+                        raw.yTotalRaw.push(totalPoint);
+                    }
+                }
+                ['yPrice', 'yProfit', 'yTimeVal', 'yTotal'].forEach(key => {
+                    let cleaned = [...raw[key]];
+                    for (let i = 1; i < cleaned.length - 1; i++) {
+                        if (cleaned[i] === null || cleaned[i-1] === null || cleaned[i+1] === null) continue;
+                        let avg = (cleaned[i-1] + cleaned[i+1]) / 2;
+                        let threshold = (Math.abs(avg) < 50) ? 0.3 : avg * 0.005;
+                        if (Math.abs(cleaned[i] - avg) > threshold) cleaned[i] = avg;
+                    }
+                    raw[key] = applySmoothing(cleaned);
+                });
+                globalData = raw;
+                rowRanges = buildSessionRanges(globalData.x);
+
+                const checkAndInit = () => {
+                    if (typeof echarts !== 'undefined') {
+                        initChart(globalData);
+                        const switcher = document.getElementById('session-switcher');
+                        switcher.innerHTML = '';
+                        // 動態設定 grid-cols
+                        const cols = Math.min(rowRanges.length, 10);
+                        switcher.className = `grid grid-cols-${Math.min(cols, 5)} md:grid-cols-${cols} gap-1`;
+                        rowRanges.forEach((range, i) => {
+                            const btn = document.createElement('button');
+                            btn.className = `session-btn ${range.type === 'night' ? 'night' : ''}`;
+                            btn.innerText = range.label;
+                            btn.onclick = () => selectSession(i);
+                            switcher.appendChild(btn);
+                        });
+                        let autoIdx = getAutoSessionIndex();
+                        if (autoIdx >= rowRanges.length) autoIdx = rowRanges.length - 1;
+                        selectSession(autoIdx >= 0 ? autoIdx : 0);
+                        const updateStr = new Date().toLocaleString([], {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+                        document.getElementById('update-time').innerText = new Date().toLocaleString();
+                        document.getElementById('update-time-mobile').innerText = updateStr;
+                    } else { setTimeout(checkAndInit, 100); }
+                };
+                checkAndInit();
+            } catch (e) { console.error(e); }
+            finally { setTimeout(() => { loading.style.opacity = '0'; setTimeout(() => loading.classList.add('hidden'), 300); }, 500); }
+        }
+
+        function toggleAxis(key) {
+            axisState[key] = !axisState[key];
+            updateChartUI();
+        }
+
+        function updateChartUI() {
+            if (!myChart || !globalData) return;
+            document.getElementById('btn-l-idx').className = `mode-btn l-idx ${axisState.lIdx ? 'active' : ''}`;
+            document.getElementById('btn-l-tot').className = `mode-btn l-tot ${axisState.lTot ? 'active' : ''}`;
+            document.getElementById('btn-r-prf').className = `mode-btn r-prf ${axisState.rPrf ? 'active' : ''}`;
+            document.getElementById('btn-r-tmv').className = `mode-btn r-tmv ${axisState.rTmv ? 'active' : ''}`;
+            document.getElementById('btn-r-ast').className = `mode-btn r-ast ${axisState.rAst ? 'active' : ''}`;
+
+            const container = document.getElementById('dynamic-legend');
+            let legendHtml = '';
+            if (axisState.lIdx) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span><span class="text-[10px] font-black text-slate-700">期指</span></div>`;
+            if (axisState.lTot) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-slate-700"></span><span class="text-[10px] font-black text-slate-700">總點數</span></div>`;
+            if (axisState.rPrf) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span><span class="text-[10px] font-black text-slate-700">獲利率</span></div>`;
+            if (axisState.rTmv) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span><span class="text-[10px] font-black text-slate-700">時間價值</span></div>`;
+            if (axisState.rAst) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span><span class="text-[10px] font-black text-slate-700">資產</span></div>`;
+            if (legendHtml === '') legendHtml = '<span class="text-[11px] text-slate-400">請選取顯示數據項目</span>';
+            container.innerHTML = legendHtml;
+
+            const leftAxesCount = (axisState.lIdx ? 1 : 0) + (axisState.lTot ? 1 : 0);
+            const rightAxesCount = (axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0) + (axisState.rAst ? 1 : 0);
+
+            const getMarkPoint = (name, type) => {
+                if (type === 'profit') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#22d3ee', position: 'top', formatter: '{c}%', offset: [0, -5] } }, { type: 'min', label: { color: '#ec4899', position: 'bottom', formatter: '{c}%', offset: [0, 5] } }] };
+                if (name === '期指') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#ef4444', position: 'top', formatter: (p) => Math.round(p.value).toLocaleString() } }, { type: 'min', label: { color: '#10b981', position: 'bottom', formatter: (p) => Math.round(p.value).toLocaleString() } }] };
+                return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10 }, data: [{ type: 'max', label: { color: name === '時間價值' ? '#f97316' : '#9333ea', position: 'top', formatter: (p) => Math.round(p.value).toLocaleString() } }] };
+            };
+
+            // yAxis: L0=期指, L1=總點, R0=獲利%, R1=時間價值, R2=資產
+            let rOffset0 = 0;
+            let rOffset1 = axisState.rPrf ? 50 : 0;
+            let rOffset2 = (axisState.rPrf ? 50 : 0) + (axisState.rTmv ? 50 : 0);
+
+            const yAxes = [
+                { type: 'value', name: '期指', position: 'left', offset: 0, show: axisState.lIdx, axisLabel: { color: '#2563eb', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, min: 'dataMin', max: 'dataMax', scale: true },
+                { type: 'value', name: '總點', position: 'left', offset: axisState.lIdx ? 50 : 0, show: axisState.lTot, axisLabel: { color: '#475569', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: 0, max: 5000 },
+                { type: 'value', name: '獲利%', position: 'right', offset: 0, show: axisState.rPrf, axisLabel: { color: '#e11d48', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: -1, max: 5 },
+                { type: 'value', name: '時間價值', position: 'right', offset: rOffset1, show: axisState.rTmv, axisLabel: { color: '#f97316', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, scale: true },
+                { type: 'value', name: '資產', position: 'right', offset: rOffset2, show: axisState.rAst, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, scale: true }
+            ];
+
+            const seriesConfig = [
+                { name: '獲利率',   yIdx: 2, data: axisState.rPrf ? globalData.yProfit  : [], mp: axisState.rPrf ? getMarkPoint('獲利率', 'profit') : { data: [] } },
+                { name: '時間價值', yIdx: 3, data: axisState.rTmv ? globalData.yTimeVal : [], mp: axisState.rTmv ? getMarkPoint('時間價值', 'val')   : { data: [] } },
+                { name: '資產',     yIdx: 4, data: axisState.rAst ? globalData.yAsset   : [], mp: axisState.rAst ? getMarkPoint('資產', 'val')       : { data: [] } },
+                { name: '期指',     yIdx: 0, data: axisState.lIdx ? globalData.yPrice   : [], mp: axisState.lIdx ? getMarkPoint('期指', 'idx')        : { data: [] } },
+                { name: '總點數',   yIdx: 1, data: axisState.lTot ? globalData.yTotal   : [], mp: axisState.lTot ? getMarkPoint('總點數', 'val')      : { data: [] } }
+            ];
+
+            const isMobile = window.innerWidth < 768;
+            const dZoom = [
+                { type: 'slider', xAxisIndex: 0, bottom: 0, height: 20 },
+                { type: 'slider', yAxisIndex: 0, left: 0,  width: 18, show: axisState.lIdx },
+                { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: axisState.lTot },
+                { type: 'slider', yAxisIndex: 2, right: 0,  width: 18, show: axisState.rPrf },
+                { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: axisState.rTmv },
+                { type: 'slider', yAxisIndex: 4, right: (axisState.rPrf ? 40 : 0) + (axisState.rTmv ? 40 : 0), width: 18, show: axisState.rAst },
+                { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile }
+            ];
+
+            myChart.setOption({
+                textStyle: { fontFamily: 'Arial' },
+                grid: { left: (leftAxesCount * 55) + 15, right: (rightAxesCount * 55) + 15, top: '8%', bottom: '15%' },
+                yAxis: yAxes,
+                dataZoom: dZoom,
+                series: seriesConfig.map(s => ({ name: s.name, yAxisIndex: s.yIdx, data: s.data, markPoint: s.mp }))
+            });
+            if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
+        }
+
+        function selectSession(idx) {
+            if (!globalData || idx === -1 || !myChart || rowRanges.length === 0) return;
+            currentSessionIdx = idx;
+            document.querySelectorAll('.session-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
+            const r = rowRanges[idx]; const si = r.start - 2; const ei = Math.min(r.end - 2, globalData.x.length - 1);
+            if (si >= globalData.x.length) return;
+
+            const sx      = globalData.x.slice(si, ei + 1);
+            const spRaw   = globalData.yPriceRaw.slice(si, ei + 1);
+            const spr     = globalData.yProfit.slice(si, ei + 1).filter(v => v !== null);
+            const svT     = globalData.yTimeVal.slice(si, ei + 1).filter(v => v !== null);
+            const svA     = globalData.yAsset.slice(si, ei + 1).filter(v => v !== null);
+            const stRaw   = globalData.yTotalRaw.slice(si, ei + 1);
+
+            // 百點震幅
+            const swingVal = calculateSwing100(spRaw, 100);
+            document.getElementById('stat-swing').innerText = Math.round(swingVal).toLocaleString();
+
+            // 本週獲利
+            document.getElementById('stat-profit').innerText = spr.length > 0 ? `${spr[spr.length - 1].toFixed(2)}%` : "--%";
+
+            // 當盤績效
+            const sessionPerf = spr.length > 0 ? (spr[spr.length - 1] - spr[0]) : 0;
+            const perfEl = document.getElementById('stat-max');
+            perfEl.innerText = `${sessionPerf.toFixed(2)}%`;
+            perfEl.className = `text-base sm:text-lg font-black stat-value ${sessionPerf >= 0 ? 'text-rose-600' : 'text-emerald-600'}`;
+
+            // 時間價值（最新值）
+            document.getElementById('stat-timeval').innerText = svT.length > 0 ? Math.round(svT[svT.length - 1]).toLocaleString() : "--";
+
+            // 資產（最新值）
+            document.getElementById('stat-asset').innerText = svA.length > 0 ? Math.round(svA[svA.length - 1]).toLocaleString() : "--";
+
+            // 進出場時間點
+            let entry = "--", exit = "--";
+            for(let i=0; i<stRaw.length; i++) { if(stRaw[i] !== 0 && stRaw[i] !== null) { entry = sx[i].split(' ')[1] || sx[i]; break; } }
+            if(entry !== "--") {
+                let hasEntry = false;
+                for(let i=0; i<stRaw.length; i++) { if(!hasEntry && stRaw[i] !== 0 && stRaw[i] !== null) { hasEntry = true; continue; } if(hasEntry && stRaw[i] === 0) { exit = sx[i].split(' ')[1] || sx[i]; break; } }
+            }
+            document.getElementById('stat-entry').innerText = entry;
+            document.getElementById('stat-exit').innerText = exit;
+
+            // dataZoom 縮放至當前時段
+            const sPct = (si / globalData.x.length) * 100;
+            const ePct = (ei / globalData.x.length) * 100;
+            const getPct = (v, min, max) => (min >= max) ? 50 : Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
+            let batch = [{ dataZoomIndex: 0, start: sPct, end: ePct }];
+            if (axisState.lIdx) {
+                const sp = globalData.yPrice.slice(si, ei + 1).filter(v => v !== null);
+                if (sp.length > 0) { const pMin = Math.min(...sp)*0.998, pMax = Math.max(...sp)*1.002; batch.push({ dataZoomIndex: 1, start: getPct(pMin, pMin, pMax), end: getPct(pMax, pMin, pMax) }); }
+            }
+            if (axisState.lTot) {
+                const st = globalData.yTotal.slice(si, ei + 1).filter(v => v !== null);
+                if (st.length > 0) batch.push({ dataZoomIndex: 2, start: getPct(Math.min(...st)*0.95, 0, 5000), end: getPct(Math.max(...st)*1.05, 0, 5000) });
+            }
+            if (axisState.rPrf && spr.length > 0) batch.push({ dataZoomIndex: 3, start: getPct(Math.min(...spr)-0.1, -1, 5), end: getPct(Math.max(...spr)+0.1, -1, 5) });
+            if (axisState.rTmv && svT.length > 0) {
+                const allT = globalData.yTimeVal.filter(v=>v!==null);
+                if (allT.length > 0) batch.push({ dataZoomIndex: 4, start: getPct(Math.min(...svT)-50, Math.min(...allT), Math.max(...allT)), end: getPct(Math.max(...svT)+50, Math.min(...allT), Math.max(...allT)) });
+            }
+            if (axisState.rAst && svA.length > 0) {
+                const allA = globalData.yAsset.filter(v=>v!==null);
+                if (allA.length > 0) batch.push({ dataZoomIndex: 5, start: getPct(Math.min(...svA)*0.999, Math.min(...allA), Math.max(...allA)), end: getPct(Math.max(...svA)*1.001, Math.min(...allA), Math.max(...allA)) });
+            }
+            myChart.dispatchAction({ type: 'dataZoom', batch });
+        }
+
+        function initChart(data) {
+            const chartDom = document.getElementById('performance-chart');
+            if (myChart) myChart.dispose();
+            myChart = echarts.init(chartDom);
+
+            const markAreas = [];
+            rowRanges.forEach(range => {
+                const start = range.start - 2;
+                if (start >= 0 && start < data.x.length) {
+                    markAreas.push([
+                        { xAxis: data.x[start], itemStyle: { color: range.type === 'night' ? 'rgba(241, 245, 249, 0.4)' : 'transparent' }, label: { show: false } },
+                        { xAxis: data.x[Math.min(range.end - 2, data.x.length - 1)] }
+                    ]);
+                }
+            });
+
+            const opt = {
+                backgroundColor: 'transparent', textStyle: { fontFamily: 'Arial' },
+                tooltip: {
+                    trigger: 'axis', axisPointer: { type: 'cross' },
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#e2e8f0', textStyle: { color: '#1e293b', fontSize: 11, fontFamily: 'Arial' },
+                    formatter: function(params) {
+                        let res = `<div class="font-bold mb-1">${params[0].axisValue}</div>`;
+                        let hasVal = false;
+                        params.forEach(p => {
+                            if (p.value === null || p.value === undefined || (Array.isArray(p.data) && p.data.length === 0)) return;
+                            let val = p.value;
+                            if (p.seriesName === '獲利率') val = val.toFixed(2) + '%';
+                            else val = Math.round(val).toLocaleString();
+                            res += `<div class="flex justify-between gap-4 mt-0.5"><span>${p.marker} ${p.seriesName}</span><span class="font-bold">${val}</span></div>`;
+                            hasVal = true;
+                        });
+                        return hasVal ? res : "";
+                    }
+                },
+                xAxis: { type: 'category', data: data.x, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 30, fontFamily: 'Arial' }, axisLine: { lineStyle: { color: '#f1f5f9' } } },
+                yAxis: [
+                    { type: 'value', name: '期指',    position: 'left' },
+                    { type: 'value', name: '總點',    position: 'left' },
+                    { type: 'value', name: '獲利%',   position: 'right' },
+                    { type: 'value', name: '時間價值', position: 'right' },
+                    { type: 'value', name: '資產',    position: 'right' }
+                ],
+                dataZoom: [
+                    { type: 'slider', xAxisIndex: 0 },
+                    { type: 'slider', yAxisIndex: 0 },
+                    { type: 'slider', yAxisIndex: 1 },
+                    { type: 'slider', yAxisIndex: 2 },
+                    { type: 'slider', yAxisIndex: 3 },
+                    { type: 'slider', yAxisIndex: 4 },
+                    { type: 'inside', xAxisIndex: 0 }
+                ],
+                series: [
+                    { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
+                    { name: '獲利率',   type: 'line', yAxisIndex: 2, data: data.yProfit,  smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(225, 29, 72, 0.7)' }, { offset: 1, color: 'rgba(225, 29, 72, 0.05)' }]) }, z: 1 },
+                    { name: '時間價值', type: 'line', yAxisIndex: 3, data: data.yTimeVal, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#f97316', shadowBlur: 3 }, z: 4 },
+                    { name: '資產',     type: 'line', yAxisIndex: 4, data: data.yAsset,   smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#9333ea', shadowBlur: 3 }, z: 4 },
+                    { name: '期指',     type: 'line', yAxisIndex: 0, data: data.yPrice,   smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#2563eb', shadowBlur: 3 }, z: 5 },
+                    { name: '總點數',   type: 'line', yAxisIndex: 1, data: data.yTotal,   smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#334155', shadowBlur: 3 }, z: 5 }
+                ]
+            };
+            myChart.setOption(opt);
+            updateChartUI();
+        }
+
+        window.onload = () => {
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            fetchData();
+            document.getElementById('refresh-btn').onclick = fetchData;
+            window.addEventListener('resize', () => { if(myChart) myChart.resize(); updateChartUI(); });
+        };
+    </script>
+</body>
+</html>
