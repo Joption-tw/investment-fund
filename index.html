@@ -196,12 +196,52 @@
 
             <div id="performance-chart"></div>
         </div>
+
+        <!-- 股東績效表 -->
+        <div class="glass-card p-3 sm:p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
+                <div>
+                    <h2 class="text-base sm:text-lg font-black text-slate-800 tracking-tight">股東績效報表</h2>
+                    <p id="sh-period" class="text-[10px] font-bold text-slate-400 mt-0.5">--</p>
+                </div>
+                <p id="sh-update-time" class="text-[10px] font-bold text-slate-400">更新時間：--</p>
+            </div>
+
+            <!-- 帳戶摘要列 -->
+            <div id="sh-summary" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-1.5 mb-4"></div>
+
+            <!-- 股東明細表格 -->
+            <div class="overflow-x-auto rounded-lg border border-slate-100">
+                <table class="w-full text-[11px] sm:text-xs border-collapse min-w-[900px]">
+                    <thead>
+                        <tr class="bg-slate-800 text-white">
+                            <th class="px-2 py-2 text-left font-black">股東</th>
+                            <th class="px-2 py-2 text-right font-black">原始參與本金</th>
+                            <th class="px-2 py-2 text-right font-black">本周期初本金</th>
+                            <th class="px-2 py-2 text-right font-black">股份比例</th>
+                            <th class="px-2 py-2 text-right font-black">即時本金</th>
+                            <th class="px-2 py-2 text-right font-black">即時損益</th>
+                            <th class="px-2 py-2 text-right font-black">即時損益率</th>
+                            <th class="px-2 py-2 text-right font-black">程式租金費用</th>
+                            <th class="px-2 py-2 text-right font-black">累積損益</th>
+                            <th class="px-2 py-2 text-right font-black">累積損益率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sh-tbody"></tbody>
+                    <tfoot id="sh-tfoot"></tfoot>
+                </table>
+            </div>
+            <div id="sh-loading" class="text-center py-6 text-slate-400 text-xs font-bold">載入股東資料中...</div>
+        </div>
+
     </div>
 
     <script>
         const SHEET_ID = '1GHOlICHupM5W4lap8VkaD1WdIEZ8n1rsScTrxo7BW0k';
         const GID = '1823639969';
+        const GID_SH = '1908704661';
         const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+        const CSV_SH_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID_SH}`;
 
         let myChart = null;
         let globalData = null;
@@ -722,10 +762,104 @@
             updateChartUI();
         }
 
+        // ── 股東表格相關函式 ─────────────────────────────────────────────
+
+        function fmtNum(v) {
+            if (v === null || v === '' || v === undefined) return '--';
+            const n = parseFloat(v.toString().replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+            return isNaN(n) ? v : Math.round(n).toLocaleString();
+        }
+        function fmtPct(v) {
+            if (!v || v.toString().trim() === '') return '--';
+            return v.toString().includes('%') ? v : v + '%';
+        }
+        function colorClass(v) {
+            if (!v || v === '--') return 'text-slate-600';
+            const s = v.toString().replace(/,/g, '');
+            const n = parseFloat(s);
+            if (isNaN(n)) return 'text-slate-600';
+            return n > 0 ? 'text-rose-600' : n < 0 ? 'text-emerald-600' : 'text-slate-600';
+        }
+
+        async function fetchShareholderData() {
+            try {
+                const res = await fetch(`${CSV_SH_URL}&t=${Date.now()}`);
+                const text = await res.text();
+                const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                const rows = lines.map(l => parseCSVLine(l));
+
+                // 找 header row（col[2] === '股東'）
+                let hdrIdx = -1, summaryDataIdx = -1, periodLabel = '';
+                for (let i = 0; i < rows.length; i++) {
+                    if (rows[i][2] === '股東') { hdrIdx = i; break; }
+                    if (rows[i][2] === '更新時間') { summaryDataIdx = i + 1; }
+                    if (rows[i][2] && rows[i][2].match(/^\d{6}W\d/)) { periodLabel = rows[i][2]; }
+                }
+                if (hdrIdx === -1) return;
+
+                // 摘要列
+                if (summaryDataIdx !== -1 && rows[summaryDataIdx]) {
+                    const sd = rows[summaryDataIdx];
+                    document.getElementById('sh-period').innerText = periodLabel || '';
+                    document.getElementById('sh-update-time').innerText = `更新時間：${sd[2] || '--'}`;
+                    const summaryItems = [
+                        { label: '起始資金',   val: fmtNum(sd[3]),  color: 'text-slate-700' },
+                        { label: '即時資產',   val: fmtNum(sd[4]),  color: 'text-blue-600' },
+                        { label: '獲利金額',   val: fmtNum(sd[5]),  color: colorClass(sd[5]) },
+                        { label: '獲利率',     val: fmtPct(sd[6]),  color: colorClass(sd[6]) },
+                        { label: '保證金餘額', val: fmtNum(sd[7]),  color: 'text-slate-700' },
+                        { label: '時間價值',   val: fmtNum(sd[10]), color: 'text-orange-600' },
+                    ];
+                    document.getElementById('sh-summary').innerHTML = summaryItems.map(item => `
+                        <div class="glass-card py-1.5 px-3 flex flex-col justify-center min-h-[44px] text-center">
+                            <p class="text-[8px] font-black text-slate-400 uppercase leading-tight">${item.label}</p>
+                            <p class="text-sm font-black ${item.color} leading-none mt-0.5">${item.val}</p>
+                        </div>`).join('');
+                }
+
+                // 股東明細（hdrIdx+1 開始，直到空行或結尾）
+                const tbody = document.getElementById('sh-tbody');
+                const tfoot = document.getElementById('sh-tfoot');
+                tbody.innerHTML = ''; tfoot.innerHTML = '';
+                let rowCount = 0;
+
+                for (let i = hdrIdx + 1; i < rows.length; i++) {
+                    const r = rows[i];
+                    const name = r[2] || '';
+                    if (!name || name.trim() === '') continue;
+
+                    const isTotal = name === '總金額';
+                    const cells = [
+                        { v: name,        cls: 'text-left font-black ' + (isTotal ? 'text-slate-800' : 'text-slate-700') },
+                        { v: fmtNum(r[3]), cls: 'text-right' },
+                        { v: fmtNum(r[4]), cls: 'text-right' },
+                        { v: fmtPct(r[5]), cls: 'text-right' },
+                        { v: fmtNum(r[6]), cls: 'text-right font-bold text-blue-700' },
+                        { v: fmtNum(r[7]), cls: 'text-right font-bold ' + colorClass(r[7]) },
+                        { v: fmtPct(r[8]), cls: 'text-right font-bold ' + colorClass(r[8]) },
+                        { v: fmtNum(r[9]), cls: 'text-right text-slate-500' },
+                        { v: fmtNum(r[10]),cls: 'text-right font-bold ' + colorClass(r[10]) },
+                        { v: fmtPct(r[11]),cls: 'text-right font-bold ' + colorClass(r[11]) },
+                    ];
+                    const rowHtml = `<tr class="${isTotal ? 'bg-slate-100 border-t-2 border-slate-300' : (rowCount % 2 === 0 ? 'bg-white' : 'bg-slate-50')} hover:bg-blue-50 transition-colors">
+                        ${cells.map(c => `<td class="px-2 py-1.5 ${c.cls} whitespace-nowrap">${c.v}</td>`).join('')}
+                    </tr>`;
+                    if (isTotal) { tfoot.innerHTML = rowHtml; }
+                    else { tbody.innerHTML += rowHtml; rowCount++; }
+                }
+
+                document.getElementById('sh-loading').style.display = 'none';
+            } catch(e) {
+                console.error('股東資料載入失敗', e);
+                document.getElementById('sh-loading').innerText = '股東資料載入失敗，請重試';
+            }
+        }
+
         window.onload = () => {
             if (typeof lucide !== 'undefined') lucide.createIcons();
             fetchData();
-            document.getElementById('refresh-btn').onclick = fetchData;
+            fetchShareholderData();
+            document.getElementById('refresh-btn').onclick = () => { fetchData(); fetchShareholderData(); };
             window.addEventListener('resize', () => { if(myChart) myChart.resize(); updateChartUI(); });
         };
     </script>
