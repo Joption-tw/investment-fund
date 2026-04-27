@@ -6,9 +6,7 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { url } = req.query;
   if (!url) return res.status(400).send('Missing url parameter');
@@ -20,10 +18,16 @@ module.exports = async function handler(req, res) {
     return res.status(403).send('Domain not allowed');
   }
 
+  // 依目標網域設定正確的 Referer
+  let referer = 'https://data.eastmoney.com/';
+  if (targetUrl.includes('sinajs.cn') || targetUrl.includes('sina.com.cn')) {
+    referer = 'https://finance.sina.com.cn/';
+  }
+
   try {
     const response = await fetch(targetUrl, {
       headers: {
-        'Referer': 'https://data.eastmoney.com/',
+        'Referer': referer,
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
         'Accept': '*/*',
         'Accept-Language': 'zh-CN,zh;q=0.9',
