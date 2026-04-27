@@ -1,24 +1,31 @@
-// CORS Proxy for Chinese financial APIs
-// fund.joption.org/api/proxy?url=ENCODED_URL
+// Vercel Edge Function - 在全球邊緣節點執行（亞洲節點可存取中國金融 API）
+export const config = { runtime: 'edge' };
 
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default async function handler(request) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
 
-  const { url } = req.query;
-  if (!url) return res.status(400).send('Missing url parameter');
+  const { searchParams } = new URL(request.url);
+  const url = searchParams.get('url');
+
+  if (!url) {
+    return new Response('Missing url parameter', { status: 400, headers: corsHeaders });
+  }
 
   const targetUrl = decodeURIComponent(url);
 
   const allowed = ['eastmoney.com', 'sinajs.cn', 'sina.com.cn', 'gtimg.cn'];
   if (!allowed.some(d => targetUrl.includes(d))) {
-    return res.status(403).send('Domain not allowed');
+    return new Response('Domain not allowed', { status: 403, headers: corsHeaders });
   }
 
-  // 依目標網域設定正確的 Referer
   let referer = 'https://data.eastmoney.com/';
   if (targetUrl.includes('sinajs.cn') || targetUrl.includes('sina.com.cn')) {
     referer = 'https://finance.sina.com.cn/';
@@ -35,12 +42,19 @@ module.exports = async function handler(req, res) {
     });
 
     const text = await response.text();
-    const ct = response.headers.get('content-type') || 'text/plain; charset=utf-8';
 
-    res.setHeader('Content-Type', ct);
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).send(text);
+    return new Response(text, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': response.headers.get('content-type') || 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
   } catch (e) {
-    return res.status(500).send('Proxy error: ' + e.message);
+    return new Response(JSON.stringify({ error: e.message, url: targetUrl }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
-};
+}
