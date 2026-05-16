@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joption 策略自動化面版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', 'Microsoft JhengHei', sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .status-box { transition: all 0.3s ease; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 700; min-width: 250px; text-align: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+        .status-closed { background-color: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+        .status-standby { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+        .status-executing { background-color: #991b1b; color: #ffffff; border: 1px solid #7f1d1d; }
+        .status-balancing { background-color: #065f46; color: #ffffff; border: 1px solid #064e3b; }
+        .btn-instant { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); transition: all 0.2s ease; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3); }
+        .btn-instant:hover { transform: translateY(-1px); box-shadow: 0 6px 12px -2px rgba(59, 130, 246, 0.4); }
+        .reservation-row-off { opacity: 0.4; pointer-events: none; }
+        input[type="time"] { border: 1px solid #e2e8f0; border-radius: 0.375rem; padding: 0.25rem 0.5rem; outline: none; background: white; }
+        select { appearance: none; -webkit-appearance: none; -moz-appearance: none; cursor: pointer; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Joption 策略自動化交易系統</h1>
+                <p class="text-slate-500 text-sm">當沖策略懶人包 - 專業參數管理介面</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <span class="block text-xs text-slate-400 font-bold mb-2 uppercase tracking-tighter">系統狀態欄 (System Status)</span>
+                <div id="statusIndicator" class="status-box status-closed">策略關閉中</div>
+            </div>
+        </header>
+
+        <section class="glass-card rounded-2xl shadow-sm overflow-hidden mb-8 border border-slate-200">
+            <div class="p-4 bg-slate-800 text-white flex justify-between items-center">
+                <h2 class="font-bold flex items-center gap-2 text-base">
+                    <span class="bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs shadow-inner">1</span>
+                    核心控制開關 (Core Controls)
+                </h2>
+                <span class="text-[10px] opacity-60 uppercase tracking-widest font-bold">Automation Scheduling</span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-center border-separate border-spacing-y-1 px-4 py-2">
+                    <thead>
+                        <tr class="text-slate-400 font-bold text-xs">
+                            <th class="p-4 w-40 text-left pl-6">功能項目</th>
+                            <th class="p-4 w-48">開關狀態</th>
+                            <th class="p-4">預約時間 1</th>
+                            <th class="p-4">預約時間 2</th>
+                            <th class="p-4">預約時間 3</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y-4 divide-transparent">
+                        <tr class="bg-slate-50/80 border-l-4 border-l-slate-400">
+                            <td class="p-4 font-extrabold text-left pl-6 text-slate-700">1. 策略總開關</td>
+                            <td class="p-4">
+                                <button id="masterToggle" onclick="toggleMaster(this)" class="w-full py-2 px-4 rounded-lg font-bold bg-red-500 text-white shadow-md transition-all active:scale-95">策略已關閉</button>
+                            </td>
+                            <td colspan="3" class="p-4 text-indigo-400 italic text-left pl-8 text-xs font-semibold">啟動後方可操作下方預約項目</td>
+                        </tr>
+                        
+                        <tr class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-emerald-50/50 border-l-4 border-l-emerald-500">
+                            <td class="p-4 font-extrabold text-left pl-6 text-emerald-900">2. 進場開關</td>
+                            <td class="p-4">
+                                <button onclick="toggleReservation(this)" class="res-toggle w-full py-2 px-4 rounded-lg font-bold bg-emerald-500 text-white shadow-sm hover:opacity-90">已啟動預約...</button>
+                            </td>
+                            <td class="p-4 res-content">
+                                <button onclick="executeAction('entry')" class="btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto">
+                                    <i data-lucide="play" class="w-3 h-3 fill-current"></i>立刻執行
+                                </button>
+                            </td>
+                            <td class="p-4 res-content">
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 mx-auto w-fit">
+                                    <span class="text-[10px] text-slate-400">上午</span>
+                                    <input type="time" value="09:05" class="border-none p-0 text-sm focus:ring-0">
+                                    <i data-lucide="clock" class="w-3 h-3 text-slate-400"></i>
+                                </div>
+                            </td>
+                            <td class="p-4 res-content">
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 mx-auto w-fit">
+                                    <span class="text-[10px] text-slate-400">下午</span>
+                                    <input type="time" value="21:35" class="border-none p-0 text-sm focus:ring-0">
+                                    <i data-lucide="clock" class="w-3 h-3 text-slate-400"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-rose-50/50 border-l-4 border-l-rose-500">
+                            <td class="p-4 font-extrabold text-left pl-6 text-rose-900">3-1. 預約出場</td>
+                            <td class="p-4">
+                                <button onclick="toggleReservation(this)" class="res-toggle w-full py-2 px-4 rounded-lg font-bold bg-rose-500 text-white shadow-sm hover:opacity-90">已預約啟動...</button>
+                            </td>
+                            <td class="p-4 res-content">
+                                <button onclick="executeAction('exit')" class="btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto">
+                                    <i data-lucide="play" class="w-3 h-3 fill-current"></i>立刻執行
+                                </button>
+                            </td>
+                            <td class="p-4 res-content">
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 mx-auto w-fit">
+                                    <span class="text-[10px] text-slate-400">下午</span>
+                                    <input type="time" value="13:30" class="border-none p-0 text-sm focus:ring-0">
+                                    <i data-lucide="clock" class="w-3 h-3 text-slate-400"></i>
+                                </div>
+                            </td>
+                            <td class="p-4 res-content">
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 mx-auto w-fit">
+                                    <span class="text-[10px] text-slate-400">上午</span>
+                                    <input type="time" value="01:30" class="border-none p-0 text-sm focus:ring-0">
+                                    <i data-lucide="clock" class="w-3 h-3 text-slate-400"></i>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-rose-50/50 border-l-4 border-l-rose-400">
+                            <td class="p-4 font-extrabold text-left pl-6 text-rose-800">3-2. 強制出場</td>
+                            <td class="p-4">
+                                <button onclick="toggleReservation(this)" class="res-toggle w-full py-2 px-4 rounded-lg font-bold bg-rose-500 text-white shadow-sm hover:opacity-90">已預約啟動...</button>
+                            </td>
+                            <td class="p-4 res-content"></td>
+                            <td class="p-4 res-content">
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 mx-auto w-fit">
+                                    <span class="text-[10px] text-slate-400">下午</span>
+                                    <input type="time" value="13:42" class="border-none p-0 text-sm focus:ring-0">
+                                    <i data-lucide="clock" class="w-3 h-3 text-slate-400"></i>
+                                </div>
+                            </td>
+                            <td class="p-4 res-content">
+                                <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 mx-auto w-fit">
+                                    <span class="text-[10px] text-slate-400">上午</span>
+                                    <input type="time" value="04:30" class="border-none p-0 text-sm focus:ring-0">
+                                    <i data-lucide="clock" class="w-3 h-3 text-slate-400"></i>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="flex items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+            <button onclick="toggleSettings()" id="toggleBtn" class="flex items-center gap-2 px-6 py-2.5 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-all active:scale-95 shadow-lg">
+                <i data-lucide="eye-off" class="w-4 h-4"></i>
+                <span id="toggleText">隱藏詳細設定</span>
+            </button>
+            <button onclick="saveParameters()" class="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all active:scale-95 shadow-lg">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                存檔當前參數
+            </button>
+        </div>
+
+        <!-- 下方設定頁面容器 -->
+        <div id="settingsContainer" class="transition-all duration-500 overflow-hidden">
+            
+            <!-- 進場參數設定 -->
+            <section class="glass-card rounded-2xl shadow-sm overflow-hidden mb-8">
+                <div class="p-3 bg-white border-b border-slate-200 text-center">
+                    <h2 class="text-lg font-bold tracking-widest text-slate-700 uppercase">進場參數設定</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 border-b border-slate-200">
+                                <th class="p-3 border-r border-slate-200 w-12">#</th>
+                                <th class="p-3 border-r border-slate-200 w-24">策略名稱</th>
+                                <th class="p-3 border-r border-slate-200 min-w-[320px]">建倉檔位</th>
+                                <th class="p-3 border-r border-slate-200">下單秒數(週期)</th>
+                                <th class="p-3 border-r border-slate-200">每筆下單口數</th>
+                                <th class="p-3 border-r border-slate-200">建倉停止條件 剩餘保證金(%)</th>
+                                <th class="p-3">下單價位</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="text-center bg-white">
+                                <td class="p-4 border-r border-slate-100 font-mono text-slate-400">4</td>
+                                <td class="p-4 border-r border-slate-100 font-bold">雙賣建倉</td>
+                                <td class="p-4 border-r border-slate-100">
+                                    <div class="flex items-center justify-center gap-4 text-xs text-left">
+                                        <div class="bg-slate-50 p-2 rounded-lg border border-slate-200 flex flex-col gap-2 w-40">
+                                            <div class="text-slate-400 font-bold">下限</div>
+                                            <div class="flex items-center gap-2"><input type="radio" name="lower_limit" checked class="w-3 h-3"><input type="number" value="10.00" class="w-16 border rounded text-center"> 點</div>
+                                            <div class="flex items-center gap-2"><input type="radio" name="lower_limit" class="w-3 h-3"><select class="otmSelect border rounded w-full py-1 px-1"></select></div>
+                                        </div>
+                                        <span class="text-slate-300">至</span>
+                                        <div class="bg-slate-50 p-2 rounded-lg border border-slate-200 flex flex-col gap-2 w-40">
+                                            <div class="text-slate-400 font-bold">上限</div>
+                                            <div class="flex items-center gap-2"><input type="radio" name="upper_limit" checked class="w-3 h-3"><input type="number" value="50.00" class="w-16 border rounded text-center"> 點</div>
+                                            <div class="flex items-center gap-2"><input type="radio" name="upper_limit" class="w-3 h-3"><select class="otmSelect border rounded w-full py-1 px-1"></select></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="p-4 border-r border-slate-100"><select class="sec6to12 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="lot1to20 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="margin25to80 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4"><select class="bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"><option>立刻成交</option><option selected>中間偏難</option><option>中間偏易</option></select></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 平衡參數設定 -->
+            <section class="glass-card rounded-2xl shadow-sm overflow-hidden mb-8">
+                <div class="p-3 bg-white border-b border-slate-200 text-center">
+                    <h2 class="text-lg font-bold tracking-widest text-slate-700">平衡參數設定</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 border-b border-slate-200">
+                                <th class="p-3 border-r border-slate-200 w-12">#</th>
+                                <th class="p-3 border-r border-slate-200 w-24">策略名稱</th>
+                                <th class="p-3 border-r border-slate-200">平衡檔位</th>
+                                <th class="p-3 border-r border-slate-200">下單秒數(週期)</th>
+                                <th class="p-3 border-r border-slate-200">調倉檔位</th>
+                                <th class="p-3 border-r border-slate-200">下單價位</th>
+                                <th class="p-3">每筆下單口數</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="text-center bg-white">
+                                <td class="p-4 border-r border-slate-100 text-slate-400 font-bold text-base">5</td>
+                                <td class="p-4 border-r border-slate-100 font-bold">比值平衡</td>
+                                <td class="p-4 border-r border-slate-100">
+                                    <div class="flex flex-col items-center gap-2">
+                                        <select id="balanceRangeSelect" onchange="toggleCustomRange(this)" class="bg-amber-100 text-amber-800 font-bold rounded-full px-8 py-2 border border-amber-200 w-48 text-center">
+                                            <option>0.35 ~ 0.65</option>
+                                            <option>0.36 ~ 0.64</option>
+                                            <option>0.37 ~ 0.63</option>
+                                            <option>0.38 ~ 0.62</option>
+                                            <option>0.39 ~ 0.61</option>
+                                            <option selected>0.4 ~ 0.6</option>
+                                            <option>0.41 ~ 0.59</option>
+                                            <option>0.42 ~ 0.58</option>
+                                            <option>0.43 ~ 0.57</option>
+                                            <option value="custom">✏️ 自訂範圍...</option>
+                                        </select>
+                                        <div id="customRangeInputs" class="hidden flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-amber-300 shadow-sm">
+                                            <input type="number" id="customLower" step="0.01" min="0" max="1" value="0.4" class="w-16 border border-slate-200 rounded-lg text-center text-sm font-bold text-amber-800 py-1 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                                            <span class="text-slate-400 font-bold">~</span>
+                                            <input type="number" id="customUpper" step="0.01" min="0" max="1" value="0.6" class="w-16 border border-slate-200 rounded-lg text-center text-sm font-bold text-amber-800 py-1 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="p-4 border-r border-slate-100"><select class="sec6to9 bg-amber-100 text-amber-800 font-bold rounded-full px-6 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><div class="bg-slate-100 text-slate-500 px-4 py-2 rounded-full font-bold text-xs">平倉出場</div></td>
+                                <td class="p-4 border-r border-slate-100"><select class="bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"><option>立刻成交</option><option>中間偏難</option><option selected>中間偏易</option></select></td>
+                                <td class="p-4"><div class="bg-slate-100 text-slate-500 px-4 py-2 rounded-full font-bold text-xs">Ai計算(無條件進位)</div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 出場參數設定 -->
+            <section class="glass-card rounded-2xl shadow-sm overflow-hidden mb-8">
+                <div class="p-3 bg-white border-b border-slate-200 text-center">
+                    <h2 class="text-lg font-bold tracking-widest text-slate-700">出場參數設定</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 border-b border-slate-200">
+                                <th class="p-3 border-r border-slate-200 w-12">#</th>
+                                <th class="p-3 border-r border-slate-200 w-24">階段名稱</th>
+                                <th class="p-3 border-r border-slate-200">出場方式</th>
+                                <th class="p-3 border-r border-slate-200">每筆下單口數</th>
+                                <th class="p-3 border-r border-slate-200">下單秒數(週期)</th>
+                                <th class="p-3 border-r border-slate-200">平衡式</th>
+                                <th class="p-3">下單價位</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            <tr class="text-center">
+                                <td class="p-4 border-r border-slate-100 text-slate-400 whitespace-nowrap">6-1</td>
+                                <td class="p-4 border-r border-slate-100 font-bold">立刻出場</td>
+                                <td class="p-4 border-r border-slate-100"><select class="bg-emerald-50 text-emerald-700 font-bold rounded-full px-4 py-2 border border-emerald-200 w-32"><option selected>穩步清倉</option><option>閃電清倉</option></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="lot1to20 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="sec6to12 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><div class="bg-slate-100 text-slate-500 px-4 py-2 rounded-full font-bold text-xs">0.49999 ~ 0.500001</div></td>
+                                <td class="p-4"><select class="bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"><option>立刻成交</option><option selected>中間偏難</option><option>中間偏易</option></select></td>
+                            </tr>
+                            <tr class="text-center">
+                                <td class="p-4 border-r border-slate-100 text-slate-400 whitespace-nowrap">6-2</td>
+                                <td class="p-4 border-r border-slate-100 font-bold">預約出場</td>
+                                <td class="p-4 border-r border-slate-100"><select class="bg-emerald-50 text-emerald-700 font-bold rounded-full px-4 py-2 border border-emerald-200 w-32"><option selected>穩步清倉</option><option>閃電清倉</option></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="lot1to20 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="sec6to12 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><div class="bg-slate-100 text-slate-500 px-4 py-2 rounded-full font-bold text-xs">0.49999 ~ 0.500001</div></td>
+                                <td class="p-4"><select class="bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"><option>立刻成交</option><option selected>中間偏難</option><option>中間偏易</option></select></td>
+                            </tr>
+                            <tr class="text-center">
+                                <td class="p-4 border-r border-slate-100 text-slate-400 whitespace-nowrap">6-3</td>
+                                <td class="p-4 border-r border-slate-100 font-bold">強制出場</td>
+                                <td class="p-4 border-r border-slate-100"><select class="bg-emerald-50 text-emerald-700 font-bold rounded-full px-4 py-2 border border-emerald-200 w-32"><option>穩步清倉</option><option selected>閃電清倉</option></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="lot1to20 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><select class="sec6to12 bg-amber-100 text-amber-800 font-bold rounded-full px-4 py-2 border border-amber-200"></select></td>
+                                <td class="p-4 border-r border-slate-100"><div class="bg-slate-100 text-slate-500 px-4 py-2 rounded-full font-bold text-xs">0.49999 ~ 0.500001</div></td>
+                                <td class="p-4"><div class="bg-slate-100 text-slate-400 font-bold rounded-full px-4 py-2 border border-slate-200 text-xs cursor-not-allowed select-none">立刻成交</div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- 頁尾 -->
+        <footer class="mt-8 p-6 bg-slate-800 text-slate-300 rounded-2xl text-xs flex justify-between items-center">
+            <span>© 2024 Joption Strategy Automation</span>
+            <span class="opacity-50">參數同步已就緒</span>
+        </footer>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        
+        function populateAll() {
+            document.querySelectorAll('.otmSelect').forEach(sel => {
+                for (let i = 1; i <= 80; i++) {
+                    let opt = document.createElement('option');
+                    opt.value = i; opt.innerText = `價外${i}`;
+                    sel.appendChild(opt);
+                }
+            });
+            document.querySelectorAll('.lot1to20').forEach(sel => {
+                for (let i = 1; i <= 20; i++) {
+                    let opt = document.createElement('option');
+                    opt.value = i; opt.innerText = `${i}口`;
+                    sel.appendChild(opt);
+                }
+            });
+            document.querySelectorAll('.sec6to12').forEach(sel => {
+                for (let i = 6; i <= 12; i++) {
+                    let opt = document.createElement('option');
+                    opt.value = i; opt.innerText = `${i}秒`;
+                    if(i===8) opt.selected = true;
+                    sel.appendChild(opt);
+                }
+            });
+            document.querySelectorAll('.sec6to9').forEach(sel => {
+                for (let i = 6; i <= 9; i++) {
+                    let opt = document.createElement('option');
+                    opt.value = i; opt.innerText = `${i}秒`;
+                    sel.appendChild(opt);
+                }
+            });
+            document.querySelectorAll('.margin25to80').forEach(sel => {
+                for (let i = 25; i <= 80; i+=5) {
+                    let opt = document.createElement('option');
+                    opt.value = i; opt.innerText = `${i}%`;
+                    if(i===30) opt.selected = true;
+                    sel.appendChild(opt);
+                }
+            });
+        }
+        window.onload = populateAll;
+
+        function toggleSettings() {
+            const container = document.getElementById('settingsContainer');
+            const btn = document.getElementById('toggleBtn');
+            const text = document.getElementById('toggleText');
+            
+            if (container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                text.innerText = "隱藏詳細設定";
+                btn.innerHTML = `<i data-lucide="eye-off" class="w-4 h-4"></i><span>隱藏詳細設定</span>`;
+            } else {
+                container.classList.add('hidden');
+                text.innerText = "顯示詳細設定";
+                btn.innerHTML = `<i data-lucide="eye" class="w-4 h-4"></i><span>顯示詳細設定</span>`;
+            }
+            lucide.createIcons();
+        }
+
+        function saveParameters() {
+            const btn = event.currentTarget;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 儲存中...`;
+            setTimeout(() => {
+                btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 已存檔`;
+                setTimeout(() => { btn.innerHTML = originalHTML; lucide.createIcons(); }, 2000);
+            }, 1000);
+            lucide.createIcons();
+        }
+
+        function updateStatus(state) {
+            const indicator = document.getElementById('statusIndicator');
+            indicator.className = 'status-box';
+            if (state === 'closed') { indicator.innerText = '策略關閉中'; indicator.classList.add('status-closed'); }
+            else if (state === 'standby') { indicator.innerText = '待命中(等待預約時間啟動)'; indicator.classList.add('status-standby'); }
+            else if (state === 'entry') { indicator.innerText = '進場執行中'; indicator.classList.add('status-executing'); }
+            else if (state === 'balancing') { indicator.innerText = '監控平衡中'; indicator.classList.add('status-balancing'); }
+            else if (state === 'exit') { indicator.innerText = '出場執行中'; indicator.classList.add('status-executing'); }
+        }
+
+        function toggleMaster(btn) {
+            const isClosed = btn.innerText === "策略已關閉";
+            const rows = document.querySelectorAll('.dependent-row');
+            if (isClosed) {
+                btn.innerText = "策略已開啟"; btn.classList.replace('bg-red-500', 'bg-emerald-600');
+                updateStatus('standby'); rows.forEach(r => r.classList.remove('opacity-50', 'pointer-events-none'));
+            } else {
+                btn.innerText = "策略已關閉"; btn.classList.replace('bg-emerald-600', 'bg-red-500');
+                updateStatus('closed'); rows.forEach(r => r.classList.add('opacity-50', 'pointer-events-none'));
+            }
+        }
+
+        function toggleReservation(btn) {
+            const row = btn.closest('tr');
+            const contents = row.querySelectorAll('.res-content');
+            if (btn.classList.contains('bg-emerald-500') || btn.classList.contains('bg-rose-500')) {
+                btn.dataset.originalColor = btn.classList.contains('bg-emerald-500') ? 'bg-emerald-500' : 'bg-rose-500';
+                btn.classList.remove('bg-emerald-500', 'bg-rose-500');
+                btn.classList.add('bg-slate-400');
+                btn.innerText = "預約已關閉";
+                contents.forEach(c => c.classList.add('reservation-row-off'));
+            } else {
+                btn.classList.remove('bg-slate-400');
+                btn.classList.add(btn.dataset.originalColor || (row.innerText.includes('進場') ? 'bg-emerald-500' : 'bg-rose-500'));
+                btn.innerText = row.innerText.includes('進場') ? "已啟動預約..." : "已預約啟動...";
+                contents.forEach(c => c.classList.remove('reservation-row-off'));
+            }
+        }
+
+        function toggleCustomRange(sel) {
+            const inputs = document.getElementById('customRangeInputs');
+            inputs.classList.toggle('hidden', sel.value !== 'custom');
+        }
+
+        function executeAction(type) {
+            if (type === 'entry') {
+                updateStatus('entry'); setTimeout(() => updateStatus('balancing'), 2000);
+            } else {
+                updateStatus('exit'); setTimeout(() => updateStatus('standby'), 2000);
+            }
+        }
+    </script>
+</body>
+</html>
