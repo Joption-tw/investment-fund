@@ -438,9 +438,8 @@
         }
 
         // ===== ROW STATE MACHINE =====
-        // entry/exit/force：standby → scheduled → executing → standby（取消時自動觸發 balance）
-        // balance：standby ↔ balancing（可手動切換，或由 entry 執行結束自動觸發）
-        function setRowState(rowId, state) {
+        // silent=true：被其他列聯動強制關閉，不再觸發下一層cascade
+        function setRowState(rowId, state, silent = false) {
             rowStates[rowId] = state;
             const resBtn = document.getElementById('resBtn-' + rowId);
             const instantBtn = document.getElementById('instantBtn-' + rowId);
@@ -470,6 +469,8 @@
                         instantBtn.className = 'w-32 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mx-auto bg-teal-300 text-white cursor-not-allowed opacity-60';
                         instantBtn.textContent = '執行中...';
                     }
+                    // 3啟動 → 強制關閉 2
+                    if (!silent) setRowState('entry', 'standby', true);
                 }
                 updateSystemStatus();
                 return;
@@ -488,6 +489,10 @@
                     lucide.createIcons();
                 }
                 timeInputs.forEach(i => i.disabled = false);
+                // 2完成/取消 → 自動啟動 3（不阻斷4-1, 4-2）
+                if (!silent && rowId === 'entry' && masterOpen) {
+                    setRowState('balance', 'balancing', true);
+                }
 
             } else if (state === 'scheduled') {
                 resBtn.className = 'w-full py-2 px-4 rounded-lg font-bold bg-amber-400 text-amber-900 shadow-sm transition-all';
@@ -505,16 +510,30 @@
             } else if (state === 'executing') {
                 clearInterval(countdownTimers[rowId]);
                 resBtn.className = 'w-full py-2 px-4 rounded-lg font-bold bg-red-600 text-white shadow-sm transition-all hover:bg-red-700 active:scale-95';
-                // 點擊取消：回待機，若是 entry 則同時自動觸發比值平衡
-                resBtn.onclick = () => {
-                    setRowState(rowId, 'standby');
-                    if (rowId === 'entry') setRowState('balance', 'balancing');
-                };
+                resBtn.onclick = () => setRowState(rowId, 'standby'); // 點擊取消（standby 會自動處理 cascade）
                 resBtn.textContent = execLabels[rowId];
                 if (instantBtn) {
                     instantBtn.disabled = true;
                     instantBtn.className = 'w-32 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mx-auto bg-red-400 text-white cursor-not-allowed opacity-60';
                     instantBtn.textContent = '執行中...';
+                }
+                // ── 聯動規則 ──
+                if (!silent) {
+                    if (rowId === 'entry') {
+                        // 2執行 → 強制關閉 3, 4-1, 4-2
+                        setRowState('balance', 'standby', true);
+                        setRowState('exit', 'standby', true);
+                        setRowState('force', 'standby', true);
+                    } else if (rowId === 'exit') {
+                        // 4-1執行 → 強制關閉 2, 3
+                        setRowState('entry', 'standby', true);
+                        setRowState('balance', 'standby', true);
+                    } else if (rowId === 'force') {
+                        // 4-2執行 → 強制關閉 2, 3, 4-1
+                        setRowState('entry', 'standby', true);
+                        setRowState('balance', 'standby', true);
+                        setRowState('exit', 'standby', true);
+                    }
                 }
             }
 
