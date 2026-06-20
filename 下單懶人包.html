@@ -65,13 +65,13 @@
                             <td colspan="3" class="p-4 text-indigo-400 italic text-left pl-8 text-xs font-semibold">啟動後方可操作下方預約項目</td>
                         </tr>
                         
-                        <tr class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-emerald-50/50 border-l-4 border-l-emerald-500">
+                        <tr data-row="entry" class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-emerald-50/50 border-l-4 border-l-emerald-500">
                             <td class="p-4 font-extrabold text-left pl-6 text-emerald-900">2. 進場開關</td>
                             <td class="p-4">
-                                <button onclick="toggleReservation(this)" class="res-toggle w-full py-2 px-4 rounded-lg font-bold bg-emerald-500 text-white shadow-sm hover:opacity-90">已啟動預約...</button>
+                                <button id="resBtn-entry" onclick="toggleReservation('entry')" class="w-full py-2 px-4 rounded-lg font-bold bg-slate-200 text-slate-500 shadow-sm transition-all">點擊預約</button>
                             </td>
                             <td class="p-4 res-content">
-                                <button onclick="executeAction('entry')" class="btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto">
+                                <button id="instantBtn-entry" onclick="executeInstant('entry')" class="btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto">
                                     <i data-lucide="play" class="w-3 h-3 fill-current"></i>立刻執行
                                 </button>
                             </td>
@@ -91,13 +91,13 @@
                             </td>
                         </tr>
 
-                        <tr class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-rose-50/50 border-l-4 border-l-rose-500">
+                        <tr data-row="exit" class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-rose-50/50 border-l-4 border-l-rose-500">
                             <td class="p-4 font-extrabold text-left pl-6 text-rose-900">3-1. 預約出場</td>
                             <td class="p-4">
-                                <button onclick="toggleReservation(this)" class="res-toggle w-full py-2 px-4 rounded-lg font-bold bg-rose-500 text-white shadow-sm hover:opacity-90">已預約啟動...</button>
+                                <button id="resBtn-exit" onclick="toggleReservation('exit')" class="w-full py-2 px-4 rounded-lg font-bold bg-slate-200 text-slate-500 shadow-sm transition-all">點擊預約</button>
                             </td>
                             <td class="p-4 res-content">
-                                <button onclick="executeAction('exit')" class="btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto">
+                                <button id="instantBtn-exit" onclick="executeInstant('exit')" class="btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto">
                                     <i data-lucide="play" class="w-3 h-3 fill-current"></i>立刻執行
                                 </button>
                             </td>
@@ -117,10 +117,10 @@
                             </td>
                         </tr>
 
-                        <tr class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-rose-50/50 border-l-4 border-l-rose-400">
+                        <tr data-row="force" class="dependent-row opacity-50 pointer-events-none transition-all duration-300 bg-rose-50/50 border-l-4 border-l-rose-400">
                             <td class="p-4 font-extrabold text-left pl-6 text-rose-800">3-2. 強制出場</td>
                             <td class="p-4">
-                                <button onclick="toggleReservation(this)" class="res-toggle w-full py-2 px-4 rounded-lg font-bold bg-rose-500 text-white shadow-sm hover:opacity-90">已預約啟動...</button>
+                                <button id="resBtn-force" onclick="toggleReservation('force')" class="w-full py-2 px-4 rounded-lg font-bold bg-slate-200 text-slate-500 shadow-sm transition-all">點擊預約</button>
                             </td>
                             <td class="p-4 res-content"></td>
                             <td class="p-4 res-content">
@@ -398,46 +398,129 @@
             else if (state === 'exit') { indicator.innerText = '出場執行中'; indicator.classList.add('status-executing'); }
         }
 
+        // ===== STATE =====
+        const rowStates = { entry: 'standby', exit: 'standby', force: 'standby' };
+        const countdownTimers = { entry: null, exit: null, force: null };
+        let masterOpen = false;
+
+        // ===== MASTER TOGGLE =====
         function toggleMaster(btn) {
-            const isClosed = btn.innerText === "策略已關閉";
+            masterOpen = !masterOpen;
             const rows = document.querySelectorAll('.dependent-row');
-            if (isClosed) {
-                btn.innerText = "策略已開啟"; btn.classList.replace('bg-red-500', 'bg-emerald-600');
-                updateStatus('standby'); rows.forEach(r => r.classList.remove('opacity-50', 'pointer-events-none'));
+            if (masterOpen) {
+                btn.textContent = '策略已開啟';
+                btn.classList.replace('bg-red-500', 'bg-emerald-600');
+                rows.forEach(r => r.classList.remove('opacity-50', 'pointer-events-none'));
+                updateStatus('standby');
             } else {
-                btn.innerText = "策略已關閉"; btn.classList.replace('bg-emerald-600', 'bg-red-500');
-                updateStatus('closed'); rows.forEach(r => r.classList.add('opacity-50', 'pointer-events-none'));
+                btn.textContent = '策略已關閉';
+                btn.classList.replace('bg-emerald-600', 'bg-red-500');
+                rows.forEach(r => r.classList.add('opacity-50', 'pointer-events-none'));
+                updateStatus('closed');
             }
         }
 
-        function toggleReservation(btn) {
-            const row = btn.closest('tr');
-            const contents = row.querySelectorAll('.res-content');
-            if (btn.classList.contains('bg-emerald-500') || btn.classList.contains('bg-rose-500')) {
-                btn.dataset.originalColor = btn.classList.contains('bg-emerald-500') ? 'bg-emerald-500' : 'bg-rose-500';
-                btn.classList.remove('bg-emerald-500', 'bg-rose-500');
-                btn.classList.add('bg-slate-400');
-                btn.innerText = "預約已關閉";
-                contents.forEach(c => c.classList.add('reservation-row-off'));
-            } else {
-                btn.classList.remove('bg-slate-400');
-                btn.classList.add(btn.dataset.originalColor || (row.innerText.includes('進場') ? 'bg-emerald-500' : 'bg-rose-500'));
-                btn.innerText = row.innerText.includes('進場') ? "已啟動預約..." : "已預約啟動...";
-                contents.forEach(c => c.classList.remove('reservation-row-off'));
+        // ===== ROW STATE MACHINE =====
+        function setRowState(rowId, state) {
+            rowStates[rowId] = state;
+            const resBtn = document.getElementById('resBtn-' + rowId);
+            const instantBtn = document.getElementById('instantBtn-' + rowId);
+            const row = document.querySelector('tr[data-row="' + rowId + '"]');
+            const timeInputs = row ? row.querySelectorAll('input[type="time"]') : [];
+            const execLabels = { entry: '進場執行中...', exit: '出場執行中...', force: '強制出場中...' };
+
+            if (state === 'standby') {
+                clearInterval(countdownTimers[rowId]);
+                resBtn.className = 'w-full py-2 px-4 rounded-lg font-bold bg-slate-200 text-slate-500 shadow-sm transition-all';
+                resBtn.textContent = '點擊預約';
+                if (instantBtn) {
+                    instantBtn.disabled = false;
+                    instantBtn.className = 'btn-instant w-32 py-2 px-3 rounded-lg text-white font-bold text-xs flex items-center justify-center gap-2 mx-auto';
+                    instantBtn.innerHTML = '<i data-lucide="play" class="w-3 h-3 fill-current"></i>立刻執行';
+                    lucide.createIcons();
+                }
+                timeInputs.forEach(i => i.disabled = false);
+
+            } else if (state === 'scheduled') {
+                resBtn.className = 'w-full py-2 px-4 rounded-lg font-bold bg-amber-400 text-amber-900 shadow-sm transition-all';
+                resBtn.textContent = '計算倒數...';
+                if (instantBtn) {
+                    instantBtn.disabled = true;
+                    instantBtn.className = 'w-32 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mx-auto bg-slate-300 text-slate-400 cursor-not-allowed';
+                    instantBtn.innerHTML = '<i data-lucide="play" class="w-3 h-3 fill-current"></i>立刻執行';
+                    lucide.createIcons();
+                }
+                const nextTime = getNextScheduledTime(timeInputs);
+                if (nextTime) {
+                    startCountdown(rowId, nextTime, () => setRowState(rowId, 'executing'));
+                }
+
+            } else if (state === 'executing') {
+                clearInterval(countdownTimers[rowId]);
+                resBtn.className = 'w-full py-2 px-4 rounded-lg font-bold bg-red-600 text-white shadow-sm transition-all cursor-not-allowed';
+                resBtn.textContent = execLabels[rowId];
+                if (instantBtn) {
+                    instantBtn.disabled = true;
+                    instantBtn.className = 'w-32 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 mx-auto bg-red-500 text-white cursor-not-allowed';
+                    instantBtn.textContent = '執行中...';
+                }
             }
+
+            updateSystemStatus();
+        }
+
+        function getNextScheduledTime(timeInputs) {
+            const now = new Date();
+            let nearest = null;
+            timeInputs.forEach(input => {
+                if (!input.value) return;
+                const [h, m] = input.value.split(':').map(Number);
+                const target = new Date();
+                target.setHours(h, m, 0, 0);
+                if (target <= now) target.setDate(target.getDate() + 1);
+                if (!nearest || target < nearest) nearest = target;
+            });
+            return nearest;
+        }
+
+        function startCountdown(rowId, targetTime, onComplete) {
+            clearInterval(countdownTimers[rowId]);
+            const resBtn = document.getElementById('resBtn-' + rowId);
+            countdownTimers[rowId] = setInterval(() => {
+                const diff = targetTime - new Date();
+                if (diff <= 0) {
+                    clearInterval(countdownTimers[rowId]);
+                    onComplete();
+                    return;
+                }
+                const h = Math.floor(diff / 3600000);
+                const m = Math.floor((diff % 3600000) / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
+                resBtn.textContent = '倒數 ' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+            }, 1000);
+        }
+
+        function toggleReservation(rowId) {
+            const state = rowStates[rowId];
+            if (state === 'standby') setRowState(rowId, 'scheduled');
+            else if (state === 'scheduled') setRowState(rowId, 'standby');
+            // executing 狀態按鈕已 cursor-not-allowed，不觸發
+        }
+
+        function executeInstant(rowId) {
+            setRowState(rowId, 'executing');
+        }
+
+        function updateSystemStatus() {
+            if (!masterOpen) { updateStatus('closed'); return; }
+            if (rowStates.entry === 'executing') { updateStatus('entry'); return; }
+            if (rowStates.exit === 'executing' || rowStates.force === 'executing') { updateStatus('exit'); return; }
+            updateStatus('standby');
         }
 
         function toggleCustomRange(sel) {
             const inputs = document.getElementById('customRangeInputs');
             inputs.classList.toggle('hidden', sel.value !== 'custom');
-        }
-
-        function executeAction(type) {
-            if (type === 'entry') {
-                updateStatus('entry'); setTimeout(() => updateStatus('balancing'), 2000);
-            } else {
-                updateStatus('exit'); setTimeout(() => updateStatus('standby'), 2000);
-            }
         }
     </script>
 </body>
