@@ -440,6 +440,7 @@
         // ===== ROW STATE MACHINE =====
         // silent=true：被其他列聯動強制關閉，不再觸發下一層cascade
         function setRowState(rowId, state, silent = false) {
+            const prevState = rowStates[rowId];
             rowStates[rowId] = state;
             const resBtn = document.getElementById('resBtn-' + rowId);
             const instantBtn = document.getElementById('instantBtn-' + rowId);
@@ -489,15 +490,15 @@
                     lucide.createIcons();
                 }
                 timeInputs.forEach(i => i.disabled = false);
-                // 完成/取消後的自動啟動邏輯（不阻斷其他列）
-                if (!silent && masterOpen) {
+                // 只有從「執行中」結束才自動啟動，預約取消不觸發
+                if (!silent && masterOpen && prevState === 'executing') {
                     if (rowId === 'entry') {
-                        // 2完成/取消 → 自動啟動 3、4-1、4-2
+                        // 2執行完畢 → 自動啟動 3、4-1、4-2
                         setRowState('balance', 'balancing', true);
                         setRowState('exit', 'scheduled', true);
                         setRowState('force', 'scheduled', true);
                     } else if (rowId === 'exit' || rowId === 'force') {
-                        // 4-1 / 4-2 完成清倉 → 自動啟動 3 確保無殘餘口數
+                        // 4-1 / 4-2 清倉完畢 → 自動啟動 3 確保無殘餘口數
                         setRowState('balance', 'balancing', true);
                     }
                 }
