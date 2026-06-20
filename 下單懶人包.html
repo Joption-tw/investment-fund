@@ -489,9 +489,15 @@
                     lucide.createIcons();
                 }
                 timeInputs.forEach(i => i.disabled = false);
-                // 2完成/取消 → 自動啟動 3（不阻斷4-1, 4-2）
-                if (!silent && rowId === 'entry' && masterOpen) {
-                    setRowState('balance', 'balancing', true);
+                // 完成/取消後的自動啟動邏輯（不阻斷其他列）
+                if (!silent && masterOpen) {
+                    if (rowId === 'entry') {
+                        // 2完成/取消 → 自動啟動 3
+                        setRowState('balance', 'balancing', true);
+                    } else if (rowId === 'exit' || rowId === 'force') {
+                        // 4-1 / 4-2 完成清倉 → 自動啟動 3 確保無殘餘口數
+                        setRowState('balance', 'balancing', true);
+                    }
                 }
 
             } else if (state === 'scheduled') {
